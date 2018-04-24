@@ -56,24 +56,42 @@ void QuadControl::Init()
 VehicleCommand QuadControl::GenerateMotorCommands(float collThrustCmd, V3F momentCmd)
 {
     // Convert a desired 3-axis moment and collective thrust command to
-    //   individual motor thrust commands
+    //     individual motor thrust commands
     // INPUTS:
-    //   desCollectiveThrust: desired collective thrust [N]
-    //   desMoment: desired rotation moment about each axis [N m]
+    //     collThrustCmd: desired collective thrust [N]
+    //     momentCmd: desired rotation moment about each axis [N m]
     // OUTPUT:
-    //   set class member variable cmd (class variable for graphing) where
-    //   cmd.desiredThrustsN[0..3]: motor commands, in [N]
+    //     set class member variable cmd (class variable for graphing) where
+    //     cmd.desiredThrustsN[0..3]: motor commands, in [N]
 
     // HINTS:
     // - you can access parts of desMoment via e.g. desMoment.x
     // You'll need the arm length parameter L, and the drag/thrust ratio kappa
 
     ////////////////////////////// BEGIN STUDENT CODE ///////////////////////////
+    const float l_inv = 1.0F / L;
+    const float k_inv = 1.0F / kappa;
 
-    cmd.desiredThrustsN[0] = mass * 9.81f / 4.f; // front left
-    cmd.desiredThrustsN[1] = mass * 9.81f / 4.f; // front right
-    cmd.desiredThrustsN[2] = mass * 9.81f / 4.f; // rear left
-    cmd.desiredThrustsN[3] = mass * 9.81f / 4.f; // rear right
+    const float f = collThrustCmd;
+    const float t_x = momentCmd.x;
+    const float t_y = momentCmd.y;
+    const float t_z = momentCmd.z;
+
+    // This comes from the matrix equation:
+    // [1  1  1  1][F1]     [Ft   ]
+    // [L -L -L  L][F2]     [tau_x]
+    // [L  L -L -L][F3] =   [tau_y]
+    // [K -K  K -K][F4]     [tau_z]
+
+    // The inverse of the 4x4 matrix is:
+    // [ 1/4,  1/(4*L),  1/(4*L),  1/(4*K)]
+    // [ 1/4, -1/(4*L),  1/(4*L), -1/(4*K)]
+    // [ 1/4, -1/(4*L), -1/(4*L),  1/(4*K)]
+    // [ 1/4,  1/(4*L), -1/(4*L), -1/(4*K)]
+    cmd.desiredThrustsN[0] = 0.25 * (f + l_inv*t_x + l_inv*t_y + k_inv*t_z); // front left
+    cmd.desiredThrustsN[1] = 0.25 * (f - l_inv*t_x + l_inv*t_y - k_inv*t_z); // front right
+    cmd.desiredThrustsN[2] = 0.25 * (f - l_inv*t_x - l_inv*t_y + k_inv*t_z); // rear left
+    cmd.desiredThrustsN[3] = 0.25 * (f + l_inv*t_x - l_inv*t_y - k_inv*t_z); // rear right
 
     /////////////////////////////// END STUDENT CODE ////////////////////////////
 
