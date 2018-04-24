@@ -5,9 +5,11 @@ BUILD_DIR="${REPO_ROOT}/build"
 
 # Build code
 mkdir -p "${BUILD_DIR}"
-cd "${BUILD_DIR}"
-cmake ..
-make -j8
+
+docker run --rm -it --volume="${REPO_ROOT}":"${REPO_ROOT}" --workdir="${BUILD_DIR}" \
+           --user=$(id -u):$(id -g) carlosgalvezp/fcnd_p3_cpp cmake ..
+docker run --rm -it --volume="${REPO_ROOT}":"${REPO_ROOT}" --workdir="${BUILD_DIR}" \
+           --user=$(id -u):$(id -g) carlosgalvezp/fcnd_p3_cpp make -j8
 
 # Run simulator
 # https://github.com/NVIDIA/nvidia-docker/issues/136#issuecomment-232755805
