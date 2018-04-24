@@ -79,20 +79,24 @@ VehicleCommand QuadControl::GenerateMotorCommands(float collThrustCmd, V3F momen
     const float t_z = momentCmd.z;
 
     // This comes from the matrix equation:
-    // [1  1  1  1][F1]     [Ft   ]
-    // [L -L -L  L][F2]     [tau_x]
-    // [L  L -L -L][F3] =   [tau_y]
-    // [K -K  K -K][F4]     [tau_z]
+    // [ 1  1  1  1][F1]     [Ft   ]
+    // [ L -L  L -L][F2]     [tau_x]
+    // [ L  L -L -L][F3] =   [tau_y]
+    // [-K  K  K -K][F4]     [tau_z]
+
+    // Differences w.r.t. Python version:
+    // 1) The motors spin in opposite direction
+    // 2) M3 and M4 are swapped
 
     // The inverse of the 4x4 matrix is:
-    // [ 1/4,  1/(4*L),  1/(4*L),  1/(4*K)]
-    // [ 1/4, -1/(4*L),  1/(4*L), -1/(4*K)]
-    // [ 1/4, -1/(4*L), -1/(4*L),  1/(4*K)]
-    // [ 1/4,  1/(4*L), -1/(4*L), -1/(4*K)]
-    cmd.desiredThrustsN[0] = 0.25 * (f + l_inv*t_x + l_inv*t_y + k_inv*t_z); // front left
-    cmd.desiredThrustsN[1] = 0.25 * (f - l_inv*t_x + l_inv*t_y - k_inv*t_z); // front right
-    cmd.desiredThrustsN[2] = 0.25 * (f - l_inv*t_x - l_inv*t_y + k_inv*t_z); // rear left
-    cmd.desiredThrustsN[3] = 0.25 * (f + l_inv*t_x - l_inv*t_y - k_inv*t_z); // rear right
+    // [0.25,  0.25/L,  0.25/L, -0.25/K],
+    // [0.25, -0.25/L,  0.25/L,  0.25/K],
+    // [0.25,  0.25/L, -0.25/L,  0.25/K],
+    // [0.25, -0.25/L, -0.25/L, -0.25/K]]
+    cmd.desiredThrustsN[0] = 0.25 * (f + l_inv*t_x + l_inv*t_y - k_inv*t_z); // front left
+    cmd.desiredThrustsN[1] = 0.25 * (f - l_inv*t_x + l_inv*t_y + k_inv*t_z); // front right
+    cmd.desiredThrustsN[2] = 0.25 * (f + l_inv*t_x - l_inv*t_y + k_inv*t_z); // rear left
+    cmd.desiredThrustsN[3] = 0.25 * (f - l_inv*t_x - l_inv*t_y - k_inv*t_z); // rear right
 
     /////////////////////////////// END STUDENT CODE ////////////////////////////
 
@@ -116,7 +120,7 @@ V3F QuadControl::BodyRateControl(V3F pqrCmd, V3F pqr)
     V3F momentCmd;
 
     ////////////////////////////// BEGIN STUDENT CODE ///////////////////////////
-    V3F pqr_dot = kpPQR * (pqrCmd - pqr);
+    const V3F pqr_dot = kpPQR * (pqrCmd - pqr);
     momentCmd = V3F(Ixx, Iyy, Izz) * pqr_dot;
     /////////////////////////////// END STUDENT CODE ////////////////////////////
 
@@ -161,8 +165,8 @@ V3F QuadControl::RollPitchControl(V3F accelCmd, Quaternion<float> attitude, floa
 
     // Roll and pitch rates
     const float r_33_inv = 1.0F / R(2,2);
-    pqrCmd.x =  r_33_inv * (R(1,0) * b_x_c_dot - R(0,0) * b_y_c_dot);
-    pqrCmd.y =  r_33_inv * (R(1,1) * b_x_c_dot - R(0,1) * b_y_c_dot);
+    pqrCmd.x =  r_33_inv * (R(1,0)*b_x_c_dot - R(0,0)*b_y_c_dot);
+    pqrCmd.y =  r_33_inv * (R(1,1)*b_x_c_dot - R(0,1)*b_y_c_dot);
     pqrCmd.z = 0.0F;  // yaw controller set in YawControl
     /////////////////////////////// END STUDENT CODE ////////////////////////////
 
