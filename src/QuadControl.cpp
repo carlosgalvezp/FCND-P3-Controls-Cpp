@@ -146,9 +146,24 @@ V3F QuadControl::RollPitchControl(V3F accelCmd, Quaternion<float> attitude, floa
     Mat3x3F R = attitude.RotationMatrix_IwrtB();
 
     ////////////////////////////// BEGIN STUDENT CODE ///////////////////////////
+    // Current attitude
+    const float b_x_a = R(0,2);
+    const float b_y_a = R(1,2);
 
+    // Target attitude
+    const float thrust_acceleration = collThrustCmd / mass;
+    const float b_x_c = accelCmd.x / (thrust_acceleration);
+    const float b_y_c = accelCmd.y / (thrust_acceleration);
 
+    // Commanded rates in world frame
+    const float b_x_c_dot = kpBank * (b_x_c - b_x_a);
+    const float b_y_c_dot = kpBank * (b_y_c - b_y_a);
 
+    // Roll and pitch rates
+    const float r_33_inv = 1.0F / R(2,2);
+    pqrCmd.x =  r_33_inv * (R(1,0) * b_x_c_dot - R(0,0) * b_y_c_dot);
+    pqrCmd.y =  r_33_inv * (R(1,1) * b_x_c_dot - R(0,1) * b_y_c_dot);
+    pqrCmd.z = 0.0F;  // yaw controller set in YawControl
     /////////////////////////////// END STUDENT CODE ////////////////////////////
 
     return pqrCmd;
