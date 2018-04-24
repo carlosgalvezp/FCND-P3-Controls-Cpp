@@ -155,7 +155,7 @@ V3F QuadControl::RollPitchControl(V3F accelCmd, Quaternion<float> attitude, floa
     const float b_y_a = R(1,2);
 
     // Target attitude
-    const float thrust_acceleration = collThrustCmd / mass;
+    const float thrust_acceleration = -collThrustCmd / mass;
     const float b_x_c = accelCmd.x / (thrust_acceleration);
     const float b_y_c = accelCmd.y / (thrust_acceleration);
 
@@ -198,9 +198,29 @@ float QuadControl::AltitudeControl(float posZCmd, float velZCmd, float posZ, flo
     float thrust = 0;
 
     ////////////////////////////// BEGIN STUDENT CODE ///////////////////////////
+    // Get z component of the thrust
+    const float b_z = R(2,2);
 
+    // Compute error
+    const float error = posZCmd - posZ;
+    const float error_dot = velZCmd - velZ;
+    integratedAltitudeError += error;
 
+    // Compute desired acceleration
+    const float u1_bar = kpPosZ * error + \
+                         kpVelZ * error_dot + \
+                         KiPosZ * integratedAltitudeError + \
+                         accelZCmd;
+    float acc_z_desired = (u1_bar - CONST_GRAVITY) / b_z;
 
+    // Constrain acceleration based on max and min ascent rates
+    // const float min_acc_z = (-maxAscentRate  - velZ) / dt;
+    // const float max_acc_z = ( maxDescentRate - velZ) / dt;
+
+    // acc_z_desired = CONSTRAIN(acc_z_desired, min_acc_z, max_acc_z);
+
+    // Compute thrust (positive upwards)
+    thrust = -acc_z_desired * mass;
     /////////////////////////////// END STUDENT CODE ////////////////////////////
 
     return thrust;
