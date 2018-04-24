@@ -69,7 +69,8 @@ VehicleCommand QuadControl::GenerateMotorCommands(float collThrustCmd, V3F momen
     // You'll need the arm length parameter L, and the drag/thrust ratio kappa
 
     ////////////////////////////// BEGIN STUDENT CODE ///////////////////////////
-    const float l_inv = 1.0F / L;
+    const float l = L * 0.5F * sqrt(2.0F);  // Arm length perpendicular to X-Y axis
+    const float l_inv = 1.0F / l;
     const float k_inv = 1.0F / kappa;
 
     const float f = collThrustCmd;
