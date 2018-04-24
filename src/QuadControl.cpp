@@ -116,9 +116,8 @@ V3F QuadControl::BodyRateControl(V3F pqrCmd, V3F pqr)
     V3F momentCmd;
 
     ////////////////////////////// BEGIN STUDENT CODE ///////////////////////////
-
-
-
+    V3F pqr_dot = kpPQR * (pqrCmd - pqr);
+    momentCmd = V3F(Ixx, Iyy, Izz) * pqr_dot;
     /////////////////////////////// END STUDENT CODE ////////////////////////////
 
     return momentCmd;
