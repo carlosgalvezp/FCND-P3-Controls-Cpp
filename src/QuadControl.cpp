@@ -201,10 +201,13 @@ float QuadControl::AltitudeControl(float posZCmd, float velZCmd, float posZ, flo
     // Get z component of the thrust
     const float b_z = R(2,2);
 
+    // Constrain commanded velocity (NED, descending means higher Z)
+    velZCmd = CONSTRAIN(velZCmd, -maxAscentRate, maxDescentRate);
+
     // Compute error
     const float error = posZCmd - posZ;
     const float error_dot = velZCmd - velZ;
-    integratedAltitudeError += error;
+    integratedAltitudeError += error * dt;
 
     // Compute desired acceleration
     const float u1_bar = kpPosZ * error + \
@@ -212,12 +215,6 @@ float QuadControl::AltitudeControl(float posZCmd, float velZCmd, float posZ, flo
                          KiPosZ * integratedAltitudeError + \
                          accelZCmd;
     float acc_z_desired = (u1_bar - CONST_GRAVITY) / b_z;
-
-    // Constrain acceleration based on max and min ascent rates
-    // const float min_acc_z = (-maxAscentRate  - velZ) / dt;
-    // const float max_acc_z = ( maxDescentRate - velZ) / dt;
-
-    // acc_z_desired = CONSTRAIN(acc_z_desired, min_acc_z, max_acc_z);
 
     // Compute thrust (positive upwards)
     thrust = -acc_z_desired * mass;
@@ -230,7 +227,7 @@ float QuadControl::AltitudeControl(float posZCmd, float velZCmd, float posZ, flo
 V3F QuadControl::LateralPositionControl(V3F posCmd, V3F velCmd, V3F pos, V3F vel, V3F accelCmd)
 {
     // Calculate a desired horizontal acceleration based on
-    //  desired lateral position/velocity/acceleration and current pose
+    // desired lateral position/velocity/acceleration and current pose
     // INPUTS:
     //   posCmd: desired position, in NED [m]
     //   velCmd: desired velocity, in NED [m/s]
