@@ -4,7 +4,7 @@
 # X=Y sets X to Y. Y may be a string, float, or list of 3 floats
 ############################################################################
 
-[QuadControlParams] 
+[QuadControlParams]
 
 UseIdealEstimator=1
 
@@ -19,12 +19,12 @@ minMotorThrust = .1
 maxMotorThrust = 4.5
 
 # Position control gains
-kpPosXY = 1
+kpPosXY = 30
 kpPosZ = 1
 KiPosZ = 0
 
 # Velocity control gains
-kpVelXY = 4
+kpVelXY = 8
 kpVelZ = 4
 
 # Angle control gains

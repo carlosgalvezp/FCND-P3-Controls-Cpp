@@ -249,9 +249,20 @@ V3F QuadControl::LateralPositionControl(V3F posCmd, V3F velCmd, V3F pos, V3F vel
     posCmd.z = pos.z;
 
     ////////////////////////////// BEGIN STUDENT CODE ///////////////////////////
+    // Contrain desired velocity
+    velCmd.x = CONSTRAIN(velCmd.x, -maxSpeedXY, maxSpeedXY);
+    velCmd.y = CONSTRAIN(velCmd.y, -maxSpeedXY, maxSpeedXY);
 
+    // Compute PD controller + feedforward
+    const V3F error = posCmd - pos;
+    const V3F error_dot = velCmd - vel;
 
+    accelCmd = kpPosXY*error + kpVelXY*error_dot + accelCmd;
 
+    // Constrain desired acceleration
+    accelCmd.x = CONSTRAIN(accelCmd.x, -maxAccelXY, maxAccelXY);
+    accelCmd.y = CONSTRAIN(accelCmd.y, -maxAccelXY, maxAccelXY);
+    accelCmd.z = 0.0F;
     /////////////////////////////// END STUDENT CODE ////////////////////////////
 
     return accelCmd;
