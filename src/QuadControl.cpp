@@ -12,6 +12,26 @@
 #include <systemlib/param/param.h>
 #endif
 
+namespace
+{
+    /// Normalize angle to the range [-pi, pi)
+    /// https://stackoverflow.com/a/11498248
+    ///
+    /// /param x: input angle, in radians
+    /// /return output angle, normalized to the range [-pi, pi)
+    float normalizeAngle(const float x)
+    {
+        float y = fmodf(x + F_PI, 2.0F*F_PI);
+
+        if (y < 0.0F)
+        {
+            y += 2.0F*F_PI;
+        }
+
+        return y - F_PI;
+    }
+}  // namespace
+
 void QuadControl::Init()
 {
     BaseController::Init();
@@ -283,8 +303,8 @@ float QuadControl::YawControl(float yawCmd, float yaw)
 
     float yawRateCmd=0;
     ////////////////////////////// BEGIN STUDENT CODE ///////////////////////////
-
-
+    const float error = normalizeAngle(yawCmd - yaw);
+    yawRateCmd = kpYaw * error;
     /////////////////////////////// END STUDENT CODE ////////////////////////////
 
     return yawRateCmd;
