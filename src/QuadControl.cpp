@@ -308,7 +308,6 @@ float QuadControl::YawControl(float yawCmd, float yaw)
     /////////////////////////////// END STUDENT CODE ////////////////////////////
 
     return yawRateCmd;
-
 }
 
 VehicleCommand QuadControl::RunControl(float dt, float simTime)
