@@ -1,11 +1,10 @@
 ## Project: Controls
-[![Submission Video](http://img.youtube.com/vi/DZ2NLhmdjdU/0.jpg)](https://youtu.be/DZ2NLhmdjdU)
 
 ---
 
 
 ## [Rubric](https://review.udacity.com/#!/rubrics/1643/view) Points
-### Here I will consider the rubric points individually and describe how I addressed each point in my implementation.
+Here I will consider the rubric points individually and describe how I addressed each point in my implementation.
 
 ---
 ### Writeup / README
@@ -18,25 +17,16 @@ You're reading it! Below I describe how I addressed each rubric point and where 
 
 #### 1. Implemented body rate control in python and C++.
 
+For the Python project, first we create some a class hierarchy to simplify the creation of P and PD controllers, taking as input the current error and derivative of error, and outputting the command to minimize that error, as seen below:
+
 ```python
-class PIDController(object):
-    def __init__(self, k_p, k_i, k_d):
+class PDController(object):
+    def __init__(self, k_p, k_d):
         self.k_p = k_p
-        self.k_i = k_i
         self.k_d = k_d
 
-        self.error_sum = 0.0
-
     def control(self, error, error_dot, feed_forward=0.0):
-        self.error_sum += error
-        return self.k_p * error + self.k_i * self.error_sum + self.k_d * error_dot + feed_forward
-
-class PDController(PIDController):
-    def __init__(self, k_p, k_d):
-        super().__init__(k_p=k_p, k_i=0.0, k_d=k_d)
-
-    def control(self, error, error_dot, feed_forward=0.0):
-        return super().control(error, error_dot, feed_forward)
+        return self.k_p * error +  self.k_d * error_dot + feed_forward
 
 class PController(PDController):
     def __init__(self, k_p):
@@ -46,6 +36,38 @@ class PController(PDController):
         return super().control(error, error_dot=0.0, feed_forward=0.0)
 ```
 
+The controllers are initialized in the constructor of `NonLinearController`:
+
+```python
+class NonlinearController(object):
+    def __init__(self):
+        """Initialize the controller object and control gains"""
+        # Altitude controller (PD controller)
+        self.altitude_controller_ = PDController(k_p=8.0, k_d=4.0)
+
+        # Yaw controller (P controller)
+        self.yaw_controller_ = PController(k_p=5.5)
+
+        # Body-rate controller (P controllers)
+        pq_controller = PController(k_p=20.0)
+        self.p_controller_ = pq_controller
+        self.q_controller_ = pq_controller
+        self.r_controller_ = PController(k_p=7.5)
+
+        # Roll-pitch controller (P controllers)
+        roll_pitch_controller = PController(k_p=8.0)
+        self.roll_controller_ = roll_pitch_controller
+        self.pitch_controller_ = roll_pitch_controller
+
+        # Lateral controller (PD controllers)
+        xy_controller = PDController(k_p=5.0, k_d=4.0)
+        self.x_controller_ = xy_controller
+        self.y_controller_ = xy_controller
+```
+
+Next, we implement the body-rate controller as a P controller, generating desired moments (in Nm) based on the commanded and actual body rates. We multiply the output of the P controller by the Moment of Inertia variable (`MOI`) to obtain the moment in units of Nm. Finally, the moment is constrained to take into account the physical limits of the quadcopter. This was only possible for the Python code, since no limits on torque were provided in the C++ version.
+
+**Python code**
 ```python
 def body_rate_control(self, body_rate_cmd, body_rate):
     """ Generate the roll, pitch, yaw moment commands in the body frame
@@ -67,6 +89,7 @@ def body_rate_control(self, body_rate_cmd, body_rate):
     return np.array([moment_p, moment_q, moment_r])
 ```
 
+**C++ code**
 ```cpp
 V3F QuadControl::BodyRateControl(V3F pqrCmd, V3F pqr)
 {
@@ -95,6 +118,18 @@ V3F QuadControl::BodyRateControl(V3F pqrCmd, V3F pqr)
 
 #### 2. Implement roll pitch control in python and C++.
 
+The roll-pitch controller takes as input the commanded acceleration (NED), the current attitude and the thrust command, and outputs the desired pitch and roll rates in body frame.
+
+First, we obtain the current tilt `b_a_y` and `b_a_y` from the rotation matrix `R`.
+
+Then, we compute the desired tilt `b_c_x` and `b_c_y` by normalizing the desired acceleration by the thrust. Note that we must divide it by the mass of the drone to convert it to acceleration. A negative sign is also needed since thrust is positive upwards but the acceleration is given in NED coordinates (positive down). We constrain it to a maximum and minimum tilt value to prevent the drone from fliping.
+
+Next, a P controller determines the desired roll and pitch rate in the world frame (`b_c_x_dot` and `b_c_y_dot`).
+
+Finally, in order to output the desired roll and pitch rate in the body frame, we apply a non-linear transformation as seen in the lectures, taking into account the rotation matrix as seen in the lectures. Below the full source code is presented:
+
+**Python code**
+
 ```python
 def roll_pitch_controller(self, acceleration_cmd, attitude, thrust_cmd):
     """ Generate the rollrate and pitchrate commands in the body frame
@@ -112,17 +147,25 @@ def roll_pitch_controller(self, acceleration_cmd, attitude, thrust_cmd):
         R = euler2RM(*attitude)
 
         if abs(R[2][2]) > EPSILON:
+            # Current attitude
+            b_a_x = R[0,2]
+            b_a_y = R[1,2]
+
+            # Desired attitude
             # Thrust comes with positive up, but in NED it should be positive down!
             # Also, b_* must be dimensionless so convert thrust to acceleration
             b_c_x = acceleration_cmd[0] / (-thrust_cmd / DRONE_MASS_KG)
             b_c_y = acceleration_cmd[1] / (-thrust_cmd / DRONE_MASS_KG)
 
-            b_a_x = R[0,2]
-            b_a_y = R[1,2]
+            # Clip desired attitude to ensure the drone won't go upside down
+            b_c_x = np.clip(b_c_x, -MAX_TILT, MAX_TILT)
+            b_c_y = np.clip(b_c_y, -MAX_TILT, MAX_TILT)
 
+            # Compute desired roll and pitch rates in world frame
             b_c_x_dot = self.roll_controller_.control(b_c_x - b_a_x)
             b_c_y_dot = self.pitch_controller_.control(b_c_y - b_a_y)
 
+            # Convert to body frame
             M = np.array([[R[1,0], -R[0,0]],
                             [R[1,1], -R[0,1]]])
             b_c_dot = np.array([b_c_x_dot, b_c_y_dot])
@@ -135,6 +178,8 @@ def roll_pitch_controller(self, acceleration_cmd, attitude, thrust_cmd):
 
     return roll_pitch_rate_cmd
 ```
+
+**C++ code**
 
 ```cpp
 V3F QuadControl::RollPitchControl(V3F accelCmd, Quaternion<float> attitude, float collThrustCmd)
@@ -186,6 +231,11 @@ V3F QuadControl::RollPitchControl(V3F accelCmd, Quaternion<float> attitude, floa
 
 #### 3. Implement altitude control in python.
 
+The altitude controller is a PD controller since we have a second-order system (we control acceleration to reach a desired position).
+First, we compute the desired acceleration `u_1_bar` with the PD controller. Then we account for the non-linear effects of the attitude by dividing by `b_z`. Finally, we multiply the acceleration by the mass of the drone to create a thrust command in Newtons.
+
+The full source code can be seen below:
+
 ```python
 def altitude_control(self, altitude_cmd, vertical_velocity_cmd, altitude, vertical_velocity, attitude, acceleration_ff=0.0):
     """Generate vertical acceleration (thrust) command
@@ -210,7 +260,7 @@ def altitude_control(self, altitude_cmd, vertical_velocity_cmd, altitude, vertic
         error_z_dot = vertical_velocity_cmd - vertical_velocity
 
         u_1_bar = self.altitude_controller_.control(error_z, error_z_dot, acceleration_ff)
-        thrust = DRONE_MASS_KG * ((u_1_bar - (-GRAVITY)) / b_z)
+        thrust = DRONE_MASS_KG * u_1_bar / b_z
         thrust = np.clip(thrust, 0.0, MAX_THRUST)
     else:
         print('b_z = 0.0, cannot compute thrust!')
@@ -219,6 +269,12 @@ def altitude_control(self, altitude_cmd, vertical_velocity_cmd, altitude, vertic
 ```
 
 #### 4. Implement altitude controller in C++.
+
+The C++ version of the altitude controller is pretty much the same as the one in Python, since we included the integrator part in both cases.
+
+The only difference in this case is that we are provided with constraints about the ascent and descent rate of the drone, which we take into account by constraining the commanded velocity.
+
+The full source code is shown below:
 
 ```cpp
 float QuadControl::AltitudeControl(float posZCmd, float velZCmd, float posZ, float velZ,
@@ -274,6 +330,12 @@ float QuadControl::AltitudeControl(float posZCmd, float velZCmd, float posZ, flo
 
 #### 5. Implement lateral position control in python and C++.
 
+Similar to the altitude controller, the lateral control is a second-order system problem, and thus we need to use a PD controller. The code is rather simple since we simply take as input position and velocities and output desired accelerations, all in NED coordinates.
+
+In the C++ code, we contrain the commanded velocity and acceleration values to the physical limits of the drone.
+
+**Python code**
+
 ```python
 def lateral_position_control(self, local_position_cmd, local_velocity_cmd, local_position, local_velocity,
                                 acceleration_ff = np.array([0.0, 0.0])):
@@ -289,15 +351,17 @@ def lateral_position_control(self, local_position_cmd, local_velocity_cmd, local
     Returns: desired vehicle 2D acceleration in the local frame [north, east]
     """
     acc_x = self.x_controller_.control(local_position_cmd[0] - local_position[0],
-                                        local_velocity_cmd[0] - local_velocity[0],
-                                        acceleration_ff[0])
+                                       local_velocity_cmd[0] - local_velocity[0],
+                                       acceleration_ff[0])
 
     acc_y = self.y_controller_.control(local_position_cmd[1] - local_position[1],
-                                        local_velocity_cmd[1] - local_velocity[1],
-                                        acceleration_ff[1])
+                                       local_velocity_cmd[1] - local_velocity[1],
+                                       acceleration_ff[1])
 
     return np.array([acc_x, acc_y])
 ```
+
+**C++ code**
 
 ```cpp
 V3F QuadControl::LateralPositionControl(V3F posCmd, V3F velCmd, V3F pos, V3F vel, V3F accelCmd)
@@ -348,7 +412,24 @@ V3F QuadControl::LateralPositionControl(V3F posCmd, V3F velCmd, V3F pos, V3F vel
 
 #### 6. Implement yaw control in python and C++.
 
+Finally, the yaw controller is a P controller that takes as input the current and commanded yaw, and outputs the desired yaw rate in rad/s.
+
+The only caveat here is that we need to **normalize** the error to account for angle wrap.
+
+The full source code is shown below.
+
+**Python code**
+
 ```python
+def normalize_angle(x):
+    """Normalize angle to the range [pi, -pi]."""
+    x = (x + np.pi) % (2.0*np.pi)
+
+    if x < 0:
+        x += 2.0*np.pi
+
+    return x - np.pi
+
 def yaw_control(self, yaw_cmd, yaw):
     """ Generate the target yawrate
 
@@ -362,7 +443,21 @@ def yaw_control(self, yaw_cmd, yaw):
     return self.yaw_controller_.control(error)
 ```
 
+**C++ code**
+
 ```cpp
+float normalizeAngle(const float x)
+{
+    float y = fmodf(x + F_PI, 2.0F*F_PI);
+
+    if (y < 0.0F)
+    {
+        y += 2.0F*F_PI;
+    }
+
+    return y - F_PI;
+}
+
 float QuadControl::YawControl(float yawCmd, float yaw)
 {
     // Calculate a desired yaw rate to control yaw to yawCmd
@@ -386,6 +481,22 @@ float QuadControl::YawControl(float yawCmd, float yaw)
 ```
 
 #### 7. Implement calculating the motor commands given commanded thrust and moments in C++.
+
+We infer the motor commands following the same procedure as described in the lectures:
+
+1. Determine the physical equations that govern the motion of the quadcopter: 1 equation for thrust, and 3 equations for torque.
+2. Write them in an `Ax = b` form and solve for x.
+
+Note however that this exercise was different from the lectures in the following ways:
+
+- Motors 3 and 4 are swapped.
+- The motors spin in opposite direction than shown in the lecture.
+- The constants `k_m` and `k_f` are not given. Instead, the ration between them, `kappa`, is given.
+- The distance `L` is the distance from the center of the quad to one of the rotors.
+
+With these considerations, we solve the linear equation symbolically using Matlab and write the operations directly in C++ to improve computational performance. For example we expand all the operations instead of performing matrix multiplication.
+
+The full source code is shown below:
 
 ```cpp
 VehicleCommand QuadControl::GenerateMotorCommands(float collThrustCmd, V3F momentCmd)
@@ -443,4 +554,97 @@ VehicleCommand QuadControl::GenerateMotorCommands(float collThrustCmd, V3F momen
 
 #### 1. Your python controller is successfully able to fly the provided test trajectory, meeting the minimum flight performance metrics.
 
+The Python controller successfully flies the provided trajectory within specifications. It's a bit agressive in order to fulfill the horizontal error contraints.
+
+A video showing the performance is shown here:
+[![Submission Video](http://img.youtube.com/vi/yZzXNWILdvc/0.jpg)](https://youtu.be/yZzXNWILdvc)
+
+The output of the log is:
+
+```
+Maximum Horizontal Error: 1.9211492508292862/2.0
+Maximum Vertical Error: 0.6115704557605528/1.0
+Mission Time: 2.324368/20.0
+Mission Success:  True
+```
+
+The corresponding navigation log `TLog.txt` is attached to this submission.
+
+Finally, the 2D trajectory is shown below:
+
+![](res/python_trajectory.png)
+
+
 #### 2. Your C++ controller is successfully able to fly the provided test trajectory and visually passes inspection of the scenarios leading up to the test trajectory.
+
+The C++ controller passes all 5 scenarios, as shown below:
+
+**Scenario 1**
+
+Video from simulator:
+
+![](res/cpp_1.gif)
+
+Log:
+
+```
+Simulation #1 (../config/1_Intro.txt)
+PASS: ABS(Quad.PosFollowErr) was less than 0.500000 for at least 0.800000 seconds
+```
+
+**Scenario 2**
+
+Video from simulator:
+
+![](res/cpp_2.gif)
+
+Log:
+
+```
+Simulation #1 (../config/2_AttitudeControl.txt)
+PASS: ABS(Quad.Roll) was less than 0.025000 for at least 0.750000 seconds
+PASS: ABS(Quad.Omega.X) was less than 2.500000 for at least 0.750000 seconds
+```
+
+**Scenario 3**
+
+Video from simulator:
+
+![](res/cpp_3.gif)
+
+Log:
+
+```
+Simulation #1 (../config/3_PositionControl.txt)
+PASS: ABS(Quad1.Pos.X) was less than 0.100000 for at least 1.250000 seconds
+PASS: ABS(Quad2.Pos.X) was less than 0.100000 for at least 1.250000 seconds
+PASS: ABS(Quad2.Yaw) was less than 0.100000 for at least 1.000000 seconds
+```
+
+**Scenario 4**
+
+Video from simulator:
+
+![](res/cpp_4.gif)
+
+Log:
+
+```
+Simulation #1 (../config/4_Nonidealities.txt)
+PASS: ABS(Quad1.PosFollowErr) was less than 0.100000 for at least 1.500000 seconds
+PASS: ABS(Quad2.PosFollowErr) was less than 0.100000 for at least 1.500000 seconds
+PASS: ABS(Quad3.PosFollowErr) was less than 0.100000 for at least 1.500000 seconds
+```
+
+**Scenario 5**
+
+Video from simulator:
+
+![](res/cpp_5.gif)
+
+Log:
+
+```
+Simulation #1 (../config/5_TrajectoryFollow.txt)
+PASS: ABS(Quad2.PosFollowErr) was less than 0.250000 for at least 3.000000 seconds
+```
