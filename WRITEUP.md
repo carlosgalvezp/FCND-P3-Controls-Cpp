@@ -557,6 +557,7 @@ VehicleCommand QuadControl::GenerateMotorCommands(float collThrustCmd, V3F momen
 The Python controller successfully flies the provided trajectory within specifications. It's a bit agressive in order to fulfill the horizontal error contraints.
 
 A video showing the performance is shown here:
+
 [![Submission Video](http://img.youtube.com/vi/yZzXNWILdvc/0.jpg)](https://youtu.be/yZzXNWILdvc)
 
 The output of the log is:
